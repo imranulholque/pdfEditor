@@ -3,9 +3,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PDF Editor</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;700&family=Noto+Serif+Bengali:wght@400;700&family=Hind+Siliguri:wght@400;700&display=swap" rel="stylesheet">
-<script src="node_modules/pdfjs-dist/build/pdf.min.js"></script>
-<script src="node_modules/pdf-lib/dist/pdf-lib.min.js"></script>
-<script src="node_modules/@pdf-lib/fontkit/dist/fontkit.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
 :root{--bg:#f1f3f6;--bar:#fff;--tx:#1d2330;--ac:#2563eb;--bd:#d9dee7}
 @media(prefers-color-scheme:dark){:root{--bg:#171a21;--bar:#232833;--tx:#e8ebf1;--bd:#363d4b}}
@@ -40,7 +39,6 @@ input[type=number]{width:64px;cursor:text}
 .rb{position:absolute;border:1.5px dashed #e11d48;background:#e11d4818;z-index:8}
 body.cut .ti,body.cut .ob{pointer-events:none}
 body.cut .ov,body.text .ov{cursor:crosshair}
-#ff{font:inherit;color:var(--tx);background:var(--bar);border:1px solid var(--bd);border-radius:7px;padding:6px 8px}
 </style></head><body>
 <header>
 <b>PDF Editor</b>
@@ -51,12 +49,11 @@ body.cut .ov,body.text .ov{cursor:crosshair}
 <button data-t="cut" title="Drag a box around a logo, seal or stamp to make it movable">Move logo/stamp</button>
 <button id="img">Add image / signature</button><input type="file" id="fi" accept="image/*" hidden>
 <span class="sep"></span>
-<input id="ff" list="fl" placeholder="Font (type to search)" style="width:190px"><datalist id="fl"></datalist>
+<select id="ff"></select>
 <input type="number" id="fz" min="3" max="300" step="0.5" title="Size (pt)">
 <button id="b"><b>B</b></button><button id="i"><i>I</i></button>
 <input type="color" id="col" title="Text colour">
 <button id="del">Delete</button>
-<button id="addf" title="Load a .ttf/.otf font file (e.g. a Bijoy font)">Add font file</button><input type="file" id="ffile" accept=".ttf,.otf" multiple hidden>
 <span id="bgbox">Remove BG:
 <input type="color" id="bgc" title="Background colour to remove">
 <input type="range" id="tol" min="5" max="150" value="45" title="Strength">
@@ -64,29 +61,15 @@ body.cut .ov,body.text .ov{cursor:crosshair}
 <button id="save" class="pri">Save PDF</button>
 </header>
 <div id="hint">Edit text: click it and type · Move text: drag the blue grip · Delete: select all text and press Delete</div>
-<main id="doc"><div id="empty"><h2>Open a PDF to start</h2><p>Click “Open PDF”, drop a file here, or press Ctrl+V to paste one.<br>Works with English and বাংলা (Avro, Bijoy, any keyboard).</p></div></main>
+<main id="doc"><div id="empty"><h2>Open a PDF to start</h2><p>Click “Open PDF” or drop a file here.<br>Works with English and বাংলা (Avro, Bijoy, any keyboard).</p></div></main>
 <div id="grip" title="Drag to move">✥</div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc='node_modules/pdfjs-dist/build/pdf.worker.min.js';
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const SC=1.5,$=s=>document.querySelector(s),grip=$('#grip');
 let bytes,tool='edit',sel=null,cur=null,name='edited.pdf';
-const FONTS=['Arial','Helvetica','Times New Roman','Courier New','Georgia','Verdana','Calibri','Tahoma','Nirmala UI','Vrinda','Noto Sans Bengali','Noto Serif Bengali','Hind Siliguri','SutonnyMJ','Kalpurush','SolaimanLipi','Nikosh'];
-const FS=new Set();let LF=[],used=new Map();window.fontsReady=Promise.resolve();
-function addFont(f){if(FS.has(f))return;FS.add(f);$('#fl').append(new Option(f))}
-FONTS.forEach(addFont);
-const nz=s=>(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const sty=s=>{s=(s||'').toLowerCase();return(/bold/.test(s)?'b':'')+(/italic|oblique/.test(s)?'i':'')};
-window.initFonts=()=>{window.fontsReady=(async()=>{try{LF=await queryLocalFonts();[...new Set(LF.map(f=>f.family))].sort().forEach(addFont)}catch(e){}})()};
-function matchFont(fn){if(!fn||!LF.length)return null;const n=nz(fn),b=nz(fn.split(/[-,]/)[0].replace(/(MT|PS)$/,''));
- let f=LF.find(x=>nz(x.postscriptName)===n)||LF.find(x=>nz(x.fullName)===n)||LF.find(x=>nz(x.family)===b);return f?f.family:null}
-$('#addf').onclick=()=>$('#ffile').click();
-$('#ffile').onchange=async e=>{for(const f of e.target.files){const nm=f.name.replace(/\.(ttf|otf)$/i,'');
- try{const ff=new FontFace(nm,await f.arrayBuffer());await ff.load();document.fonts.add(ff);
-  LF.push({family:nm,fullName:nm,postscriptName:nm,style:/bold/i.test(nm)?'Bold':'Regular',blob:async()=>f});addFont(nm)}catch(x){alert('Cannot load '+f.name)}}
- e.target.value=''};
-function showFonts(){const a=[...used].map(([n,m])=>n+(m?' ✓':' ✗')).join(' · ');
- $('#hint').textContent=a?'Fonts in this PDF: '+a+'   (✗ = not installed, nearest font used. Install it in Windows or use “Add font file”)':'Edit text: click it and type · Move text: drag the blue grip'}
+const FONTS=['Arial','Helvetica','Times New Roman','Courier New','Georgia','Verdana','Calibri','Tahoma','Noto Sans Bengali','Noto Serif Bengali','Hind Siliguri','SutonnyMJ','Kalpurush','SolaimanLipi','Nikosh'];
+FONTS.forEach(f=>$('#ff').add(new Option(f,f)));
 const hx=(r,g,b)=>'#'+[r,g,b].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
 const rgb=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
 const mk=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e};
@@ -102,16 +85,13 @@ function ink(c,x,y,w,h){x=Math.max(0,x|0);y=Math.max(0,y|0);w=Math.max(1,Math.mi
 $('#open').onclick=()=>$('#f').click();
 $('#f').onchange=e=>e.target.files[0]&&openFile(e.target.files[0]);
 addEventListener('dragover',e=>e.preventDefault());
-function handleFiles(fl){for(const f of fl){if(/pdf/i.test(f.type+f.name))return openFile(f);if(/^image/.test(f.type)&&bytes)return addImage(f)}}
-addEventListener('drop',e=>{e.preventDefault();handleFiles(e.dataTransfer.files)});
-addEventListener('paste',e=>{const fl=e.clipboardData&&e.clipboardData.files;if(fl&&fl.length){e.preventDefault();handleFiles(fl)}});
-addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='o'){e.preventDefault();$('#open').click()}if(e.ctrlKey&&e.key==='s'){e.preventDefault();$('#save').click()}});
-async function openFile(f){name=f.name.replace(/\.pdf$/i,'')+'-edited.pdf';loadBytes(new Uint8Array(await f.arrayBuffer()))}
-async function loadBytes(b){
- bytes=b;await window.fontsReady;used=new Map();
+addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer.files[0];f&&/pdf/i.test(f.type+f.name)&&openFile(f)});
+async function openFile(f){
+ name=f.name.replace(/\.pdf$/i,'')+'-edited.pdf';
+ bytes=new Uint8Array(await f.arrayBuffer());
  $('#doc').innerHTML='<p>Loading…</p>';select(null);
  try{const pdf=await pdfjsLib.getDocument({data:bytes.slice()}).promise;$('#doc').innerHTML='';
-  for(let n=1;n<=pdf.numPages;n++)await renderPage(pdf,n);showFonts();
+  for(let n=1;n<=pdf.numPages;n++)await renderPage(pdf,n);
  }catch(err){$('#doc').innerHTML='<p>Could not open this PDF: '+err.message+'</p>'}
 }
 async function renderPage(pdf,n){
@@ -129,17 +109,21 @@ async function renderPage(pdf,n){
   let fn='';try{fn=pg.commonObjs.get(it.fontName).name||''}catch(e){}
   fn=fn.replace(/^[A-Z]{6}\+/,'');
   const fam=(fn.split(/[-,]/)[0]||'').replace(/(MT|PS)$/,'').replace(/([a-z])([A-Z])/g,'$1 $2');
-  const m=matchFont(fn),pf=m||fam;if(fn)used.set(fn,m);
   const x=t[4],y=t[5]-fs*.94,cw=Math.max(it.width*SC,4),ch=fs*1.2;
   const e=mkTi(ov,{x,y,fs,txt:it.str,
-   pf,fam:`"${pf}","${fam}","${fn}",${st.fontFamily||'sans-serif'},"Noto Sans Bengali","Nirmala UI"`,
+   fam:`"${fam}","${fn}",${st.fontFamily||'sans-serif'},"Noto Sans Bengali"`,
    b:/bold|black|heavy/i.test(fn),i:/italic|oblique/i.test(fn)});
   Object.assign(e.dataset,{ox:x,oy:y,cw,ch,col:ink(c,x,y,cw,ch),bg:px(c,x>4?x-3:x+cw+3,y+ch/2)});
   e.style.minWidth=cw+'px';
  }
+ fit(ov);
+}
+function fit(ov){
+ const els=[...ov.querySelectorAll('.ti')],ws=els.map(e=>{const r=document.createRange();r.selectNodeContents(e);return r.getBoundingClientRect().width});
+ els.forEach((e,i)=>{const n=e.textContent.length,d=+e.dataset.cw-ws[i];if(n&&Math.abs(d)>.5)e.style.letterSpacing=(d/n)+'px'});
 }
 function mkTi(ov,o){
- const e=mk('div','ti');e.contentEditable='true';e.spellcheck=false;e.dataset.fam=o.pf||'Arial';e.textContent=o.txt;
+ const e=mk('div','ti');e.contentEditable='true';e.spellcheck=false;e.textContent=o.txt;
  e.style.cssText=`left:${o.x}px;top:${o.y}px;font-size:${o.fs}px;font-family:${o.fam};font-weight:${o.b?700:400};font-style:${o.i?'italic':'normal'}`;
  ov.append(e);
  e.addEventListener('focus',()=>select(e));
@@ -156,7 +140,8 @@ function select(el){
  sel&&sel.classList.remove('sel');sel=el;grip.style.display='none';$('#bgbox').style.display='none';
  if(!el)return;el.classList.add('sel');
  if(el.classList.contains('ti')){
-  const f=el.dataset.fam||'Arial';addFont(f);
+  const f=(el.style.fontFamily.match(/"([^"]+)"/)||[])[1]||'Arial';
+  if(![...$('#ff').options].some(o=>o.value===f))$('#ff').add(new Option(f,f));
   $('#ff').value=f;$('#fz').value=Math.round(parseFloat(el.style.fontSize)/SC*2)/2;
   $('#col').value=el.dataset.col||'#000000';
   el.parentNode.append(grip);placeGrip();
@@ -171,8 +156,8 @@ function drag(e,el,fn){e.preventDefault();const sx=e.clientX,sy=e.clientY,l=el.o
  const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up)};
  addEventListener('pointermove',mv);addEventListener('pointerup',up)}
 const isTi=()=>sel&&sel.classList.contains('ti');
-$('#ff').onchange=e=>{if(isTi()){sel.dataset.fam=e.target.value;sel.style.fontFamily=`"${e.target.value}",sans-serif,"Noto Sans Bengali","Nirmala UI"`;mark(sel)}};
-$('#fz').oninput=e=>{if(isTi()&&+e.target.value>0){sel.style.fontSize=e.target.value*SC+'px';mark(sel)}};
+$('#ff').onchange=e=>{if(isTi()){sel.style.letterSpacing='';sel.style.fontFamily=`"${e.target.value}",sans-serif,"Noto Sans Bengali"`;mark(sel)}};
+$('#fz').oninput=e=>{if(isTi()&&+e.target.value>0){sel.style.letterSpacing='';sel.style.fontSize=e.target.value*SC+'px';mark(sel)}};
 $('#b').onclick=()=>{if(isTi()){sel.style.fontWeight=sel.style.fontWeight==='700'?'400':'700';mark(sel)}};
 $('#i').onclick=()=>{if(isTi()){sel.style.fontStyle=sel.style.fontStyle==='italic'?'normal':'italic';mark(sel)}};
 $('#col').oninput=e=>{if(isTi()){sel.dataset.col=e.target.value;mark(sel)}};
@@ -217,8 +202,8 @@ function cutRegion(w,x,y,ww,hh){
 
 /* ---------- images & signature ---------- */
 $('#img').onclick=()=>$('#fi').click();
-$('#fi').onchange=e=>{const f=e.target.files[0];e.target.value='';f&&addImage(f)};
-async function addImage(f){
+$('#fi').onchange=async e=>{
+ const f=e.target.files[0];e.target.value='';if(!f)return;
  const u=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(f)});
  const i=await loadImg(u),k=Math.min(1,1600/Math.max(i.width,i.height)),c=cvs(i.width*k,i.height*k);
  c.getContext('2d').drawImage(i,0,0,c.width,c.height);
@@ -257,31 +242,18 @@ async function textPng(e){
  const cs=getComputedStyle(e),fs=parseFloat(cs.fontSize),S=3,L=e.innerText.replace(/\n$/,'').split('\n');
  const font=`${cs.fontStyle} ${cs.fontWeight} ${fs*S}px ${cs.fontFamily}`;
  try{await document.fonts.load(font,e.innerText)}catch(x){}
- const m=cvs(10,10).getContext('2d');m.font=font;
+ const ls=cs.letterSpacing==='normal'?'0px':parseFloat(cs.letterSpacing)*S+'px',m=cvs(10,10).getContext('2d');m.font=font;m.letterSpacing=ls;
  const W=Math.ceil(Math.max(...L.map(s=>m.measureText(s).width))+6),H=Math.ceil((L.length*1.2+.3)*fs*S);
- const c=cvs(W,H),g=c.getContext('2d');g.font=font;g.fillStyle=e.dataset.col||'#000';
+ const c=cvs(W,H),g=c.getContext('2d');g.font=font;g.letterSpacing=ls;g.fillStyle=e.dataset.col||'#000';
  L.forEach((s,i)=>g.fillText(s,0,(i*1.2+.94)*fs*S));
  return {url:c.toDataURL(),w:W/S,h:H/S};
 }
-async function drawReal(doc,pg,H,k,e,fm){
- try{const cs=getComputedStyle(e),txt=e.innerText.replace(/\n$/,'');
-  if(/[\u0980-\u09FF]/.test(txt)||!LF.length||!window.fontkit)return false;
-  const want=(+cs.fontWeight>=600?'b':'')+(cs.fontStyle==='italic'?'i':'');
-  const fd=LF.find(x=>x.family===e.dataset.fam&&sty(x.style)===want&&!/light|black|semi|cond|narrow|medium|thin|heavy/i.test(x.style));
-  if(!fd)return false;
-  let f=fm.get(fd.postscriptName);
-  if(!f){f=await doc.embedFont(await(await fd.blob()).arrayBuffer(),{subset:true});fm.set(fd.postscriptName,f)}
-  const fs=parseFloat(cs.fontSize),L=txt.split('\n');
-  L.forEach(s=>f.widthOfTextAtSize(s,10));
-  const [r,g,b]=rgb(e.dataset.col||'#000000');
-  L.forEach((s,i)=>s&&pg.drawText(s,{x:e.offsetLeft*k,y:H-(e.offsetTop+(i*1.2+.94)*fs)*k,size:fs*k,font:f,color:PDFLib.rgb(r/255,g/255,b/255)}));
-  return true}catch(x){return false}}
 const buf=async u=>(await fetch(u)).arrayBuffer();
 $('#save').onclick=async()=>{
  if(!bytes)return alert('Open a PDF first');
  const btn=$('#save');btn.textContent='Saving…';
  try{
-  const doc=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true}),P=doc.getPages(),k=1/SC,fm=new Map();if(window.fontkit)doc.registerFontkit(fontkit);
+  const doc=await PDFLib.PDFDocument.load(bytes,{ignoreEncryption:true}),P=doc.getPages(),k=1/SC;
   for(const w of document.querySelectorAll('.pg')){
    const pg=P[w._n-1],H=pg.getHeight();
    for(const e of w._ov.children){
@@ -293,19 +265,17 @@ $('#save').onclick=async()=>{
    }
    for(const e of w._ov.children){
     if(e.classList.contains('ti')&&e.dataset.ed&&e.innerText.trim()){
-     if(!await drawReal(doc,pg,H,k,e,fm)){const t=await textPng(e),im=await doc.embedPng(await buf(t.url));
-     pg.drawImage(im,{x:e.offsetLeft*k,y:H-(e.offsetTop+t.h)*k,width:t.w*k,height:t.h*k});}
+     const t=await textPng(e),im=await doc.embedPng(await buf(t.url));
+     pg.drawImage(im,{x:e.offsetLeft*k,y:H-(e.offsetTop+t.h)*k,width:t.w*k,height:t.h*k});
     }else if(e.classList.contains('ob')){
      const im=await doc.embedPng(await buf(e.dataset.cur));
      pg.drawImage(im,{x:e.offsetLeft*k,y:H-(e.offsetTop+e.offsetHeight)*k,width:e.offsetWidth*k,height:e.offsetHeight*k});
     }
    }
   }
-  const out=await doc.save();
-  if(window.api)await window.api.save(name,out);
-  else{const a=mk('a');a.href=URL.createObjectURL(new Blob([out],{type:'application/pdf'}));a.download=name;a.click()}
+  const blob=new Blob([await doc.save()],{type:'application/pdf'}),a=mk('a');
+  a.href=URL.createObjectURL(blob);a.download=name;a.click();
  }catch(err){alert('Save failed: '+err.message)}
  btn.textContent='Save PDF';
 };
-if(window.api)window.api.onOpen((n,b)=>{name=n.replace(/\.pdf$/i,'')+'-edited.pdf';loadBytes(b)});
 </script></body></html>
